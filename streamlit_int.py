@@ -1,12 +1,12 @@
-#import streamlit as st
-#import pandas as pd
-#import gspread
-#from oauth2client.service_account import ServiceAccountCredentials
-#import requests
-#import json
-#from datetime import datetime
-#import time
-#import re
+import streamlit as st
+import pandas as pd
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+import requests
+import json
+from datetime import datetime
+import time
+import re
 
 # -------------------------------------------------------------------
 # 1. НАСТРОЙКИ И СЕКРЕТЫ

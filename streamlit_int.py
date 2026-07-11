@@ -1,472 +1,323 @@
-{
- "cells": [
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "id": "8736cf79",
-   "metadata": {},
-   "outputs": [
-    {
-     "ename": "ModuleNotFoundError",
-     "evalue": "No module named 'gspread'",
-     "output_type": "error",
-     "traceback": [
-      "\u001b[31m---------------------------------------------------------------------------\u001b[39m",
-      "\u001b[31mModuleNotFoundError\u001b[39m                       Traceback (most recent call last)",
-      "\u001b[36mCell\u001b[39m\u001b[36m \u001b[39m\u001b[32mIn[3]\u001b[39m\u001b[32m, line 3\u001b[39m\n\u001b[32m      1\u001b[39m \u001b[38;5;28;01mimport\u001b[39;00m streamlit \u001b[38;5;28;01mas\u001b[39;00m st\n\u001b[32m      2\u001b[39m \u001b[38;5;28;01mimport\u001b[39;00m pandas \u001b[38;5;28;01mas\u001b[39;00m pd\n\u001b[32m----> \u001b[39m\u001b[32m3\u001b[39m \u001b[38;5;28;01mimport\u001b[39;00m gspread\n\u001b[32m      4\u001b[39m \u001b[38;5;28;01mfrom\u001b[39;00m oauth2client.service_account \u001b[38;5;28;01mimport\u001b[39;00m ServiceAccountCredentials\n\u001b[32m      5\u001b[39m \u001b[38;5;28;01mimport\u001b[39;00m requests\n\u001b[32m      6\u001b[39m \u001b[38;5;28;01mimport\u001b[39;00m json\n",
-      "\u001b[31mModuleNotFoundError\u001b[39m: No module named 'gspread'"
-     ]
+import streamlit as st
+import pandas as pd
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+import requests
+import json
+from datetime import datetime
+import time
+import re
+
+# -------------------------------------------------------------------
+# 1. НАСТРОЙКИ И СЕКРЕТЫ
+# -------------------------------------------------------------------
+
+try:
+    google_creds = st.secrets["google_sheets"]
+    TELEGRAM_BOT_TOKEN = st.secrets["telegram"]["bot_token"]
+    TELEGRAM_CHAT_ID = st.secrets["telegram"]["chat_id"]
+    USE_REAL_SERVICES = True
+except (KeyError, FileNotFoundError, AttributeError):
+    USE_REAL_SERVICES = False
+    st.warning("⚠️ Секреты не найдены. Работаем в демонстрационном режиме (без Google Sheets и Telegram).")
+
+# -------------------------------------------------------------------
+# 2. ФУНКЦИИ РАБОТЫ С GOOGLE SHEETS
+# -------------------------------------------------------------------
+
+def get_google_client():
+    if not USE_REAL_SERVICES:
+        return None
+    scope = ["https://spreadsheets.google.com/feeds",
+             "https://www.googleapis.com/auth/drive"]
+    creds_dict = {
+        "type": google_creds["type"],
+        "project_id": google_creds["project_id"],
+        "private_key_id": google_creds["private_key_id"],
+        "private_key": google_creds["private_key"],
+        "client_email": google_creds["client_email"],
+        "client_id": google_creds["client_id"],
+        "auth_uri": google_creds["auth_uri"],
+        "token_uri": google_creds["token_uri"],
+        "auth_provider_x509_cert_url": google_creds["auth_provider_x509_cert_url"],
+        "client_x509_cert_url": google_creds["client_x509_cert_url"]
     }
-   ],
-   "source": [
-    "import streamlit as st\n",
-    "import pandas as pd\n",
-    "import gspread\n",
-    "from oauth2client.service_account import ServiceAccountCredentials\n",
-    "import requests\n",
-    "import json\n",
-    "from datetime import datetime\n",
-    "import time\n",
-    "import re\n",
-    "\n",
-    "# -------------------------------------------------------------------\n",
-    "# 1. НАСТРОЙКИ И СЕКРЕТЫ (загружаются из st.secrets)\n",
-    "# -------------------------------------------------------------------\n",
-    "\n",
-    "# Попытка загрузить секреты для Google Sheets\n",
-    "try:\n",
-    "    google_creds = st.secrets[\"google_sheets\"]\n",
-    "    TELEGRAM_BOT_TOKEN = st.secrets[\"telegram\"][\"bot_token\"]\n",
-    "    TELEGRAM_CHAT_ID = st.secrets[\"telegram\"][\"chat_id\"]\n",
-    "    USE_REAL_SERVICES = True\n",
-    "except (KeyError, FileNotFoundError, AttributeError):\n",
-    "    USE_REAL_SERVICES = False\n",
-    "    st.warning(\"⚠️ Секреты не найдены. Работаем в демонстрационном режиме (без Google Sheets и Telegram).\")\n",
-    "\n",
-    "# -------------------------------------------------------------------\n",
-    "# 2. ФУНКЦИИ РАБОТЫ С GOOGLE SHEETS\n",
-    "# -------------------------------------------------------------------\n",
-    "\n",
-    "def get_google_client():\n",
-    "    \"\"\"Возвращает авторизованный клиент gspread.\"\"\"\n",
-    "    if not USE_REAL_SERVICES:\n",
-    "        return None\n",
-    "    scope = [\"https://spreadsheets.google.com/feeds\",\n",
-    "             \"https://www.googleapis.com/auth/drive\"]\n",
-    "    creds_dict = {\n",
-    "        \"type\": google_creds[\"type\"],\n",
-    "        \"project_id\": google_creds[\"project_id\"],\n",
-    "        \"private_key_id\": google_creds[\"private_key_id\"],\n",
-    "        \"private_key\": google_creds[\"private_key\"],\n",
-    "        \"client_email\": google_creds[\"client_email\"],\n",
-    "        \"client_id\": google_creds[\"client_id\"],\n",
-    "        \"auth_uri\": google_creds[\"auth_uri\"],\n",
-    "        \"token_uri\": google_creds[\"token_uri\"],\n",
-    "        \"auth_provider_x509_cert_url\": google_creds[\"auth_provider_x509_cert_url\"],\n",
-    "        \"client_x509_cert_url\": google_creds[\"client_x509_cert_url\"]\n",
-    "    }\n",
-    "    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)\n",
-    "    client = gspread.authorize(creds)\n",
-    "    return client\n",
-    "\n",
-    "def load_catalog_from_sheets():\n",
-    "    \"\"\"Загружает каталог инструментов из Google Sheets.\"\"\"\n",
-    "    if not USE_REAL_SERVICES:\n",
-    "        return get_demo_catalog()\n",
-    "    try:\n",
-    "        client = get_google_client()\n",
-    "        sheet = client.open_by_key(google_creds[\"spreadsheet_id\"]).sheet1\n",
-    "        data = sheet.get_all_records()\n",
-    "        if not data:\n",
-    "            st.error(\"Таблица пуста. Использую демо-данные.\")\n",
-    "            return get_demo_catalog()\n",
-    "        # Преобразуем в список словарей\n",
-    "        catalog = []\n",
-    "        for row in data:\n",
-    "            # Ожидаем колонки: Название, Описание, Цена, Количество, Фото (URL)\n",
-    "            catalog.append({\n",
-    "                \"name\": row.get(\"Название\", \"Без названия\"),\n",
-    "                \"description\": row.get(\"Описание\", \"\"),\n",
-    "                \"price\": float(row.get(\"Цена\", 0)),\n",
-    "                \"quantity\": int(row.get(\"Количество\", 0)),\n",
-    "                \"image\": row.get(\"Фото\", \"https://via.placeholder.com/150?text=Инструмент\")\n",
-    "            })\n",
-    "        return catalog\n",
-    "    except Exception as e:\n",
-    "        st.error(f\"Ошибка загрузки каталога: {e}. Использую демо-данные.\")\n",
-    "        return get_demo_catalog()\n",
-    "\n",
-    "def get_demo_catalog():\n",
-    "    \"\"\"Запасные данные для демонстрации.\"\"\"\n",
-    "    return [\n",
-    "        {\"name\": \"Перфоратор Bosch\", \"description\": \"Мощный, 1500 Вт\", \"price\": 1200, \"quantity\": 5,\n",
-    "         \"image\": \"https://via.placeholder.com/150?text=Инструмент\"},\n",
-    "        {\"name\": \"Бетономешалка\", \"description\": \"Объём 200 л\", \"price\": 2500, \"quantity\": 3,\n",
-    "         \"image\": \"https://via.placeholder.com/150?text=Инструмент\"},\n",
-    "        {\"name\": \"Шуруповёрт Makita\", \"description\": \"Аккумуляторный, 18В\", \"price\": 900, \"quantity\": 8,\n",
-    "         \"image\": \"https://via.placeholder.com/150?text=Инструмент\"},\n",
-    "        {\"name\": \"Сварочный аппарат\", \"description\": \"Инверторный, 200А\", \"price\": 3000, \"quantity\": 2,\n",
-    "         \"image\": \"https://via.placeholder.com/150?text=Инструмент\"},\n",
-    "        {\"name\": \"Лестница-стремянка\", \"description\": \"Алюминиевая, 6 ступеней\", \"price\": 700, \"quantity\": 10,\n",
-    "         \"image\": \"https://via.placeholder.com/150?text=Инструмент\"},\n",
-    "    ]\n",
-    "\n",
-    "def save_order_to_sheets(order_data):\n",
-    "    \"\"\"Сохраняет заказ в Google Sheets (вторая таблица или лист 'Заказы').\"\"\"\n",
-    "    if not USE_REAL_SERVICES:\n",
-    "        return True\n",
-    "    try:\n",
-    "        client = get_google_client()\n",
-    "        # Используем ту же таблицу, но лист \"Заказы\" (создайте его вручную)\n",
-    "        sheet = client.open_by_key(google_creds[\"spreadsheet_id\"]).worksheet(\"Заказы\")\n",
-    "        # Если листа нет, создаём\n",
-    "        try:\n",
-    "            sheet = client.open_by_key(google_creds[\"spreadsheet_id\"]).add_worksheet(title=\"Заказы\", rows=100, cols=20)\n",
-    "        except:\n",
-    "            pass\n",
-    "        # Заголовки, если пусто\n",
-    "        if not sheet.get_all_records():\n",
-    "            header = [\"Дата\", \"Имя\", \"Телефон\", \"Инструменты\", \"Дата начала\", \"Дата конца\", \"Комментарий\", \"Статус\"]\n",
-    "            sheet.append_row(header)\n",
-    "        # Добавляем строку\n",
-    "        row = [\n",
-    "            datetime.now().strftime(\"%Y-%m-%d %H:%M:%S\"),\n",
-    "            order_data[\"name\"],\n",
-    "            order_data[\"phone\"],\n",
-    "            \", \".join(order_data[\"tools\"]),\n",
-    "            order_data[\"start_date\"],\n",
-    "            order_data[\"end_date\"],\n",
-    "            order_data[\"comment\"],\n",
-    "            \"Новый\"\n",
-    "        ]\n",
-    "        sheet.append_row(row)\n",
-    "        return True\n",
-    "    except Exception as e:\n",
-    "        st.error(f\"Ошибка сохранения заказа: {e}\")\n",
-    "        return False\n",
-    "\n",
-    "# -------------------------------------------------------------------\n",
-    "# 3. ФУНКЦИЯ ОТПРАВКИ В TELEGRAM\n",
-    "# -------------------------------------------------------------------\n",
-    "\n",
-    "def send_telegram_notification(order_data):\n",
-    "    \"\"\"Отправляет сообщение в Telegram.\"\"\"\n",
-    "    if not USE_REAL_SERVICES:\n",
-    "        return False\n",
-    "    try:\n",
-    "        message = (\n",
-    "            f\"🔔 *Новый заказ!*\\n\\n\"\n",
-    "            f\"👤 Имя: {order_data['name']}\\n\"\n",
-    "            f\"📞 Телефон: {order_data['phone']}\\n\"\n",
-    "            f\"🛠 Инструменты: {', '.join(order_data['tools'])}\\n\"\n",
-    "            f\"📅 С {order_data['start_date']} по {order_data['end_date']}\\n\"\n",
-    "            f\"💬 Комментарий: {order_data['comment']}\"\n",
-    "        )\n",
-    "        url = f\"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage\"\n",
-    "        payload = {\n",
-    "            \"chat_id\": TELEGRAM_CHAT_ID,\n",
-    "            \"text\": message,\n",
-    "            \"parse_mode\": \"Markdown\"\n",
-    "        }\n",
-    "        response = requests.post(url, data=payload, timeout=10)\n",
-    "        return response.status_code == 200\n",
-    "    except Exception as e:\n",
-    "        st.error(f\"Ошибка отправки в Telegram: {e}\")\n",
-    "        return False\n",
-    "\n",
-    "# -------------------------------------------------------------------\n",
-    "# 4. CSS ДЛЯ ВСПЛЫВАЮЩЕГО ФОТО ПРИ НАВЕДЕНИИ\n",
-    "# -------------------------------------------------------------------\n",
-    "\n",
-    "def inject_hover_css():\n",
-    "    st.markdown(\"\"\"\n",
-    "    <style>\n",
-    "    .tool-card {\n",
-    "        border: 1px solid #ddd;\n",
-    "        border-radius: 8px;\n",
-    "        padding: 10px;\n",
-    "        margin: 10px 0;\n",
-    "        background-color: #fafafa;\n",
-    "        transition: 0.3s;\n",
-    "        position: relative;\n",
-    "    }\n",
-    "    .tool-card:hover {\n",
-    "        box-shadow: 0 4px 8px rgba(0,0,0,0.1);\n",
-    "        background-color: #f0f0f0;\n",
-    "    }\n",
-    "    .tool-card img {\n",
-    "        max-width: 100%;\n",
-    "        height: auto;\n",
-    "        border-radius: 4px;\n",
-    "        display: block;\n",
-    "        margin-bottom: 10px;\n",
-    "    }\n",
-    "    .hover-image {\n",
-    "        position: fixed;\n",
-    "        top: 50%;\n",
-    "        left: 50%;\n",
-    "        transform: translate(-50%, -50%);\n",
-    "        z-index: 9999;\n",
-    "        background: rgba(0,0,0,0.8);\n",
-    "        padding: 10px;\n",
-    "        border-radius: 10px;\n",
-    "        display: none;\n",
-    "        max-width: 80%;\n",
-    "        max-height: 80%;\n",
-    "    }\n",
-    "    .tool-card:hover .hover-image {\n",
-    "        display: block;\n",
-    "    }\n",
-    "    /* Для имитации всплывания по наведению используем псевдоэлемент, но легче сделать через JS */\n",
-    "    /* Вместо этого мы просто покажем изображение внутри карточки при наведении */\n",
-    "    </style>\n",
-    "    \"\"\", unsafe_allow_html=True)\n",
-    "\n",
-    "# Мы не будем использовать сложный всплывающий попап, а просто увеличим изображение при наведении с помощью CSS.\n",
-    "def inject_enhanced_css():\n",
-    "    st.markdown(\"\"\"\n",
-    "    <style>\n",
-    "    .tool-card {\n",
-    "        border: 1px solid #ddd;\n",
-    "        border-radius: 8px;\n",
-    "        padding: 15px;\n",
-    "        margin: 10px 0;\n",
-    "        background: white;\n",
-    "        transition: 0.2s;\n",
-    "        box-shadow: 0 2px 4px rgba(0,0,0,0.05);\n",
-    "        position: relative;\n",
-    "        overflow: hidden;\n",
-    "    }\n",
-    "    .tool-card:hover {\n",
-    "        transform: translateY(-5px);\n",
-    "        box-shadow: 0 8px 16px rgba(0,0,0,0.1);\n",
-    "        border-color: #4CAF50;\n",
-    "    }\n",
-    "    .tool-card .tool-image {\n",
-    "        transition: 0.3s;\n",
-    "        width: 100%;\n",
-    "        height: 150px;\n",
-    "        object-fit: cover;\n",
-    "        border-radius: 6px;\n",
-    "    }\n",
-    "    .tool-card:hover .tool-image {\n",
-    "        transform: scale(1.05);\n",
-    "    }\n",
-    "    .tool-card .tool-name {\n",
-    "        font-weight: bold;\n",
-    "        font-size: 1.2rem;\n",
-    "        margin-top: 10px;\n",
-    "    }\n",
-    "    .tool-card .tool-desc {\n",
-    "        color: #555;\n",
-    "        font-size: 0.9rem;\n",
-    "    }\n",
-    "    .tool-card .tool-price {\n",
-    "        color: #2E7D32;\n",
-    "        font-weight: bold;\n",
-    "        margin-top: 5px;\n",
-    "    }\n",
-    "    .tool-card .tool-quantity {\n",
-    "        font-size: 0.8rem;\n",
-    "        color: #888;\n",
-    "    }\n",
-    "    .order-form {\n",
-    "        background: #f9f9f9;\n",
-    "        padding: 20px;\n",
-    "        border-radius: 10px;\n",
-    "        margin-top: 30px;\n",
-    "        border: 1px solid #e0e0e0;\n",
-    "    }\n",
-    "    </style>\n",
-    "    \"\"\", unsafe_allow_html=True)\n",
-    "\n",
-    "# -------------------------------------------------------------------\n",
-    "# 5. ОТОБРАЖЕНИЕ КАТАЛОГА\n",
-    "# -------------------------------------------------------------------\n",
-    "\n",
-    "def display_catalog(catalog):\n",
-    "    st.header(\"📦 Наш каталог\")\n",
-    "    st.markdown(\"Наведите на карточку, чтобы увидеть фото крупнее (эффект увеличения).\")\n",
-    "\n",
-    "    # Разбиваем на колонки\n",
-    "    cols = st.columns(3)\n",
-    "    for idx, item in enumerate(catalog):\n",
-    "        col = cols[idx % 3]\n",
-    "        with col:\n",
-    "            # Формируем HTML-карточку с изображением и данными\n",
-    "            image_url = item.get(\"image\", \"https://via.placeholder.com/150?text=Инструмент\")\n",
-    "            # Проверяем, есть ли количество\n",
-    "            quantity = item.get(\"quantity\", 0)\n",
-    "            status_color = \"green\" if quantity > 0 else \"red\"\n",
-    "            status_text = \"В наличии\" if quantity > 0 else \"Нет в наличии\"\n",
-    "\n",
-    "            card_html = f\"\"\"\n",
-    "            <div class=\"tool-card\">\n",
-    "                <img src=\"{image_url}\" class=\"tool-image\" alt=\"{item['name']}\">\n",
-    "                <div class=\"tool-name\">{item['name']}</div>\n",
-    "                <div class=\"tool-desc\">{item['description']}</div>\n",
-    "                <div class=\"tool-price\">{item['price']} руб/сутки</div>\n",
-    "                <div class=\"tool-quantity\">Осталось: <span style=\"color:{status_color};\">{quantity}</span> шт.</div>\n",
-    "                <div style=\"font-size:0.8rem; margin-top:4px; color:{status_color};\">{status_text}</div>\n",
-    "            </div>\n",
-    "            \"\"\"\n",
-    "            st.markdown(card_html, unsafe_allow_html=True)\n",
-    "\n",
-    "# -------------------------------------------------------------------\n",
-    "# 6. ФОРМА ЗАКАЗА\n",
-    "# -------------------------------------------------------------------\n",
-    "\n",
-    "def order_form(catalog):\n",
-    "    st.header(\"📝 Оформить заказ\")\n",
-    "    st.markdown(\"Заполните форму, и мы свяжемся с вами для подтверждения.\")\n",
-    "\n",
-    "    with st.form(\"order_form\"):\n",
-    "        # Выбор инструментов\n",
-    "        tool_names = [item[\"name\"] for item in catalog]\n",
-    "        selected_tools = st.multiselect(\n",
-    "            \"Выберите инструменты (можно несколько):\",\n",
-    "            options=tool_names,\n",
-    "            help=\"Укажите, что вам нужно\"\n",
-    "        )\n",
-    "\n",
-    "        # Даты\n",
-    "        col1, col2 = st.columns(2)\n",
-    "        with col1:\n",
-    "            start_date = st.date_input(\"Дата начала аренды\", min_value=datetime.today())\n",
-    "        with col2:\n",
-    "            end_date = st.date_input(\"Дата окончания аренды\", min_value=start_date)\n",
-    "\n",
-    "        # Контакты\n",
-    "        col3, col4 = st.columns(2)\n",
-    "        with col3:\n",
-    "            name = st.text_input(\"Ваше имя *\", placeholder=\"Иван\")\n",
-    "        with col4:\n",
-    "            phone = st.text_input(\"Телефон *\", placeholder=\"+7 (123) 456-78-90\")\n",
-    "\n",
-    "        comment = st.text_area(\"Комментарий (дополнительные пожелания)\", placeholder=\"Укажите время доставки и т.п.\")\n",
-    "\n",
-    "        # Кнопка отправки\n",
-    "        submitted = st.form_submit_button(\"Отправить заявку 🚀\")\n",
-    "\n",
-    "        if submitted:\n",
-    "            # Валидация\n",
-    "            errors = []\n",
-    "            if not selected_tools:\n",
-    "                errors.append(\"Выберите хотя бы один инструмент.\")\n",
-    "            if not name.strip():\n",
-    "                errors.append(\"Введите имя.\")\n",
-    "            if not phone.strip():\n",
-    "                errors.append(\"Введите телефон.\")\n",
-    "            if start_date > end_date:\n",
-    "                errors.append(\"Дата начала не может быть позже даты окончания.\")\n",
-    "\n",
-    "            if errors:\n",
-    "                for err in errors:\n",
-    "                    st.error(err)\n",
-    "            else:\n",
-    "                # Собираем данные\n",
-    "                order_data = {\n",
-    "                    \"name\": name.strip(),\n",
-    "                    \"phone\": phone.strip(),\n",
-    "                    \"tools\": selected_tools,\n",
-    "                    \"start_date\": start_date.strftime(\"%Y-%m-%d\"),\n",
-    "                    \"end_date\": end_date.strftime(\"%Y-%m-%d\"),\n",
-    "                    \"comment\": comment.strip()\n",
-    "                }\n",
-    "\n",
-    "                # Сохраняем в Google Sheets (если доступно)\n",
-    "                saved = save_order_to_sheets(order_data)\n",
-    "\n",
-    "                # Отправляем в Telegram (если доступно)\n",
-    "                if USE_REAL_SERVICES:\n",
-    "                    notified = send_telegram_notification(order_data)\n",
-    "                    if saved and notified:\n",
-    "                        st.success(\"✅ Заказ успешно отправлен! Мы свяжемся с вами в ближайшее время.\")\n",
-    "                    elif saved and not notified:\n",
-    "                        st.warning(\"Заказ сохранён, но уведомление не отправлено (проверьте настройки Telegram).\")\n",
-    "                    else:\n",
-    "                        st.error(\"Произошла ошибка при сохранении заказа. Попробуйте позже.\")\n",
-    "                else:\n",
-    "                    # Демо-режим: просто показываем, что заказ принят\n",
-    "                    st.success(\"✅ Заказ принят (демо-режим). В реальном режиме данные будут записаны в Google Sheets.\")\n",
-    "                    st.info(\"Данные заказа: \" + json.dumps(order_data, ensure_ascii=False, indent=2))\n",
-    "\n",
-    "# -------------------------------------------------------------------\n",
-    "# 7. ОСНОВНОЙ ИНТЕРФЕЙС\n",
-    "# -------------------------------------------------------------------\n",
-    "\n",
-    "def main():\n",
-    "    # Настройка страницы\n",
-    "    st.set_page_config(\n",
-    "        page_title=\"Прокат инструментов\",\n",
-    "        page_icon=\"🔧\",\n",
-    "        layout=\"wide\",\n",
-    "        initial_sidebar_state=\"collapsed\"\n",
-    "    )\n",
-    "\n",
-    "    # Подключаем CSS\n",
-    "    inject_enhanced_css()\n",
-    "\n",
-    "    # Заголовок\n",
-    "    st.title(\"🔨 Прокат строительного инструмента\")\n",
-    "    st.markdown(\"**Арендуйте качественный инструмент по выгодным ценам!**\")\n",
-    "    st.markdown(\"---\")\n",
-    "\n",
-    "    # Загрузка каталога\n",
-    "    catalog = load_catalog_from_sheets()\n",
-    "\n",
-    "    # Отображаем каталог\n",
-    "    display_catalog(catalog)\n",
-    "\n",
-    "    st.markdown(\"---\")\n",
-    "\n",
-    "    # Форма заказа\n",
-    "    order_form(catalog)\n",
-    "\n",
-    "    # Футер\n",
-    "    st.markdown(\"---\")\n",
-    "    st.markdown(\n",
-    "        \"\"\"\n",
-    "        <div style=\"text-align: center; color: #888; font-size: 0.8rem;\">\n",
-    "            © 2026 Прокат инструментов. Все права защищены.<br>\n",
-    "            Телефон для связи: <a href=\"tel:+71234567890\">+7 (123) 456-78-90</a>\n",
-    "        </div>\n",
-    "        \"\"\",\n",
-    "        unsafe_allow_html=True\n",
-    "    )\n",
-    "\n",
-    "if __name__ == \"__main__\":\n",
-    "    main()"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "id": "d147d304",
-   "metadata": {},
-   "outputs": [],
-   "source": []
-  }
- ],
- "metadata": {
-  "kernelspec": {
-   "display_name": "Python 3",
-   "language": "python",
-   "name": "python3"
-  },
-  "language_info": {
-   "codemirror_mode": {
-    "name": "ipython",
-    "version": 3
-   },
-   "file_extension": ".py",
-   "mimetype": "text/x-python",
-   "name": "python",
-   "nbconvert_exporter": "python",
-   "pygments_lexer": "ipython3",
-   "version": "3.13.12"
-  }
- },
- "nbformat": 4,
- "nbformat_minor": 5
-}
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    client = gspread.authorize(creds)
+    return client
+
+def load_catalog_from_sheets():
+    if not USE_REAL_SERVICES:
+        return get_demo_catalog()
+    try:
+        client = get_google_client()
+        sheet = client.open_by_key(google_creds["spreadsheet_id"]).sheet1
+        data = sheet.get_all_records()
+        if not data:
+            st.error("Таблица пуста. Использую демо-данные.")
+            return get_demo_catalog()
+        catalog = []
+        for row in data:
+            catalog.append({
+                "name": row.get("Название", "Без названия"),
+                "description": row.get("Описание", ""),
+                "price": float(row.get("Цена", 0)),
+                "quantity": int(row.get("Количество", 0)),
+                "image": row.get("Фото", "https://via.placeholder.com/150?text=Инструмент")
+            })
+        return catalog
+    except Exception as e:
+        st.error(f"Ошибка загрузки каталога: {e}. Использую демо-данные.")
+        return get_demo_catalog()
+
+def get_demo_catalog():
+    return [
+        {"name": "Перфоратор Bosch", "description": "Мощный, 1500 Вт", "price": 1200, "quantity": 5,
+         "image": "https://via.placeholder.com/150?text=Инструмент"},
+        {"name": "Бетономешалка", "description": "Объём 200 л", "price": 2500, "quantity": 3,
+         "image": "https://via.placeholder.com/150?text=Инструмент"},
+        {"name": "Шуруповёрт Makita", "description": "Аккумуляторный, 18В", "price": 900, "quantity": 8,
+         "image": "https://via.placeholder.com/150?text=Инструмент"},
+        {"name": "Сварочный аппарат", "description": "Инверторный, 200А", "price": 3000, "quantity": 2,
+         "image": "https://via.placeholder.com/150?text=Инструмент"},
+        {"name": "Лестница-стремянка", "description": "Алюминиевая, 6 ступеней", "price": 700, "quantity": 10,
+         "image": "https://via.placeholder.com/150?text=Инструмент"},
+    ]
+
+def save_order_to_sheets(order_data):
+    if not USE_REAL_SERVICES:
+        return True
+    try:
+        client = get_google_client()
+        try:
+            sheet = client.open_by_key(google_creds["spreadsheet_id"]).worksheet("Заказы")
+        except:
+            sheet = client.open_by_key(google_creds["spreadsheet_id"]).add_worksheet(title="Заказы", rows=100, cols=20)
+        if not sheet.get_all_records():
+            header = ["Дата", "Имя", "Телефон", "Инструменты", "Дата начала", "Дата конца", "Комментарий", "Статус"]
+            sheet.append_row(header)
+        row = [
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            order_data["name"],
+            order_data["phone"],
+            ", ".join(order_data["tools"]),
+            order_data["start_date"],
+            order_data["end_date"],
+            order_data["comment"],
+            "Новый"
+        ]
+        sheet.append_row(row)
+        return True
+    except Exception as e:
+        st.error(f"Ошибка сохранения заказа: {e}")
+        return False
+
+# -------------------------------------------------------------------
+# 3. ФУНКЦИЯ ОТПРАВКИ В TELEGRAM
+# -------------------------------------------------------------------
+
+def send_telegram_notification(order_data):
+    if not USE_REAL_SERVICES:
+        return False
+    try:
+        message = (
+            f"🔔 *Новый заказ!*\n\n"
+            f"👤 Имя: {order_data['name']}\n"
+            f"📞 Телефон: {order_data['phone']}\n"
+            f"🛠 Инструменты: {', '.join(order_data['tools'])}\n"
+            f"📅 С {order_data['start_date']} по {order_data['end_date']}\n"
+            f"💬 Комментарий: {order_data['comment']}"
+        )
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": message,
+            "parse_mode": "Markdown"
+        }
+        response = requests.post(url, data=payload, timeout=10)
+        return response.status_code == 200
+    except Exception as e:
+        st.error(f"Ошибка отправки в Telegram: {e}")
+        return False
+
+# -------------------------------------------------------------------
+# 4. CSS ДЛЯ УВЕЛИЧЕНИЯ ИЗОБРАЖЕНИЙ ПРИ НАВЕДЕНИИ
+# -------------------------------------------------------------------
+
+def inject_enhanced_css():
+    st.markdown("""
+    <style>
+    .tool-card {
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 15px;
+        margin: 10px 0;
+        background: white;
+        transition: 0.2s;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        position: relative;
+        overflow: hidden;
+    }
+    .tool-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+        border-color: #4CAF50;
+    }
+    .tool-card .tool-image {
+        transition: 0.3s;
+        width: 100%;
+        height: 150px;
+        object-fit: cover;
+        border-radius: 6px;
+    }
+    .tool-card:hover .tool-image {
+        transform: scale(1.05);
+    }
+    .tool-card .tool-name {
+        font-weight: bold;
+        font-size: 1.2rem;
+        margin-top: 10px;
+    }
+    .tool-card .tool-desc {
+        color: #555;
+        font-size: 0.9rem;
+    }
+    .tool-card .tool-price {
+        color: #2E7D32;
+        font-weight: bold;
+        margin-top: 5px;
+    }
+    .tool-card .tool-quantity {
+        font-size: 0.8rem;
+        color: #888;
+    }
+    .order-form {
+        background: #f9f9f9;
+        padding: 20px;
+        border-radius: 10px;
+        margin-top: 30px;
+        border: 1px solid #e0e0e0;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# -------------------------------------------------------------------
+# 5. ОТОБРАЖЕНИЕ КАТАЛОГА
+# -------------------------------------------------------------------
+
+def display_catalog(catalog):
+    st.header("📦 Наш каталог")
+    st.markdown("Наведите на карточку, чтобы увидеть фото крупнее (эффект увеличения).")
+    cols = st.columns(3)
+    for idx, item in enumerate(catalog):
+        col = cols[idx % 3]
+        with col:
+            image_url = item.get("image", "https://via.placeholder.com/150?text=Инструмент")
+            quantity = item.get("quantity", 0)
+            status_color = "green" if quantity > 0 else "red"
+            status_text = "В наличии" if quantity > 0 else "Нет в наличии"
+            card_html = f"""
+            <div class="tool-card">
+                <img src="{image_url}" class="tool-image" alt="{item['name']}">
+                <div class="tool-name">{item['name']}</div>
+                <div class="tool-desc">{item['description']}</div>
+                <div class="tool-price">{item['price']} руб/сутки</div>
+                <div class="tool-quantity">Осталось: <span style="color:{status_color};">{quantity}</span> шт.</div>
+                <div style="font-size:0.8rem; margin-top:4px; color:{status_color};">{status_text}</div>
+            </div>
+            """
+            st.markdown(card_html, unsafe_allow_html=True)
+
+# -------------------------------------------------------------------
+# 6. ФОРМА ЗАКАЗА
+# -------------------------------------------------------------------
+
+def order_form(catalog):
+    st.header("📝 Оформить заказ")
+    st.markdown("Заполните форму, и мы свяжемся с вами для подтверждения.")
+    with st.form("order_form"):
+        tool_names = [item["name"] for item in catalog]
+        selected_tools = st.multiselect(
+            "Выберите инструменты (можно несколько):",
+            options=tool_names,
+            help="Укажите, что вам нужно"
+        )
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.date_input("Дата начала аренды", min_value=datetime.today())
+        with col2:
+            end_date = st.date_input("Дата окончания аренды", min_value=start_date)
+        col3, col4 = st.columns(2)
+        with col3:
+            name = st.text_input("Ваше имя *", placeholder="Иван")
+        with col4:
+            phone = st.text_input("Телефон *", placeholder="+7 (123) 456-78-90")
+        comment = st.text_area("Комментарий (дополнительные пожелания)", placeholder="Укажите время доставки и т.п.")
+        submitted = st.form_submit_button("Отправить заявку 🚀")
+        if submitted:
+            errors = []
+            if not selected_tools:
+                errors.append("Выберите хотя бы один инструмент.")
+            if not name.strip():
+                errors.append("Введите имя.")
+            if not phone.strip():
+                errors.append("Введите телефон.")
+            if start_date > end_date:
+                errors.append("Дата начала не может быть позже даты окончания.")
+            if errors:
+                for err in errors:
+                    st.error(err)
+            else:
+                order_data = {
+                    "name": name.strip(),
+                    "phone": phone.strip(),
+                    "tools": selected_tools,
+                    "start_date": start_date.strftime("%Y-%m-%d"),
+                    "end_date": end_date.strftime("%Y-%m-%d"),
+                    "comment": comment.strip()
+                }
+                saved = save_order_to_sheets(order_data)
+                if USE_REAL_SERVICES:
+                    notified = send_telegram_notification(order_data)
+                    if saved and notified:
+                        st.success("✅ Заказ успешно отправлен! Мы свяжемся с вами в ближайшее время.")
+                    elif saved and not notified:
+                        st.warning("Заказ сохранён, но уведомление не отправлено (проверьте настройки Telegram).")
+                    else:
+                        st.error("Произошла ошибка при сохранении заказа. Попробуйте позже.")
+                else:
+                    st.success("✅ Заказ принят (демо-режим). В реальном режиме данные будут записаны в Google Sheets.")
+                    st.info("Данные заказа: " + json.dumps(order_data, ensure_ascii=False, indent=2))
+
+# -------------------------------------------------------------------
+# 7. ОСНОВНОЙ ИНТЕРФЕЙС
+# -------------------------------------------------------------------
+
+def main():
+    st.set_page_config(
+        page_title="Прокат инструментов",
+        page_icon="🔧",
+        layout="wide",
+        initial_sidebar_state="collapsed"
+    )
+    inject_enhanced_css()
+    st.title("🔨 Прокат строительного инструмента")
+    st.markdown("**Арендуйте качественный инструмент по выгодным ценам!**")
+    st.markdown("---")
+    catalog = load_catalog_from_sheets()
+    display_catalog(catalog)
+    st.markdown("---")
+    order_form(catalog)
+    st.markdown("---")
+    st.markdown(
+        """
+        <div style="text-align: center; color: #888; font-size: 0.8rem;">
+            © 2026 Прокат инструментов. Все права защищены.<br>
+            Телефон для связи: <a href="tel:+71234567890">+7 (123) 456-78-90</a>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+if __name__ == "__main__":
+    main()

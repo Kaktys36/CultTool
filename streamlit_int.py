@@ -141,150 +141,165 @@ def send_telegram_notification(order_data):
         return False
 
 # -------------------------------------------------------------------
-# 4. CSS ДЛЯ ВСПЛЫВАЮЩЕГО ФОТО (ИСПРАВЛЕННЫЙ)
-# -------------------------------------------------------------------
-
-def inject_hover_zoom_css():
-    st.markdown("""
-    <style>
-    /* Контейнер для карточек */
-    .catalog-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 20px;
-    }
-
-    /* Карточка */
-    .tool-card {
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        padding: 15px;
-        background: white;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        transition: all 0.2s ease;
-        position: relative;
-        cursor: pointer;
-        overflow: visible; /* важно, чтобы всплывающее фото не обрезалось */
-        z-index: 1;
-    }
-    .tool-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 8px 16px rgba(0,0,0,0.1);
-        border-color: #4CAF50;
-        z-index: 2;
-    }
-    .tool-card img.tool-image {
-        width: 100%;
-        height: 150px;
-        object-fit: cover;
-        border-radius: 6px;
-        display: block;
-        margin-bottom: 8px;
-    }
-    .tool-card .tool-name {
-        font-weight: bold;
-        font-size: 1.2rem;
-        margin-top: 5px;
-    }
-    .tool-card .tool-desc {
-        color: #555;
-        font-size: 0.9rem;
-    }
-    .tool-card .tool-price {
-        color: #2E7D32;
-        font-weight: bold;
-        margin-top: 5px;
-    }
-    .tool-card .tool-quantity {
-        font-size: 0.8rem;
-        color: #888;
-    }
-
-    /* Скрытые по умолчанию элементы для всплывающего фото */
-    .tool-card .hover-zoom {
-        display: none;  /* полностью скрыты */
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%) scale(0.9);
-        z-index: 9999;
-        max-width: 70vw;
-        max-height: 70vh;
-        border-radius: 12px;
-        box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-        border: 4px solid white;
-        background: white;
-        padding: 5px;
-        transition: transform 0.25s ease, opacity 0.25s ease;
-        opacity: 0;
-        pointer-events: none;
-    }
-    .tool-card .hover-overlay {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0,0,0,0.6);
-        z-index: 9998;
-        opacity: 0;
-        transition: opacity 0.25s ease;
-        pointer-events: none;
-    }
-
-    /* При наведении на карточку показываем оверлей и увеличенное фото */
-    .tool-card:hover .hover-zoom {
-        display: block;
-        opacity: 1;
-        transform: translate(-50%, -50%) scale(1);
-        pointer-events: auto;
-    }
-    .tool-card:hover .hover-overlay {
-        display: block;
-        opacity: 1;
-        pointer-events: auto;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# -------------------------------------------------------------------
-# 5. ОТОБРАЖЕНИЕ КАТАЛОГА
+# 4. ОТОБРАЖЕНИЕ КАТАЛОГА (ЧЕРЕЗ HTML-КОМПОНЕНТ)
 # -------------------------------------------------------------------
 
 def display_catalog(catalog):
     st.header("📦 Наш каталог")
     st.markdown("**Наведите на карточку, чтобы увидеть увеличенное фото инструмента.**")
 
-    # Открываем контейнер с сеткой
-    html = '<div class="catalog-grid">'
+    # Генерируем HTML для всех карточек
+    cards_html = ""
     for item in catalog:
         image_url = item.get("image", "https://via.placeholder.com/150?text=Инструмент")
         quantity = item.get("quantity", 0)
         status_color = "green" if quantity > 0 else "red"
         status_text = "В наличии" if quantity > 0 else "Нет в наличии"
 
-        html += f"""
-        <div class="tool-card">
+        cards_html += f"""
+        <div class="tool-card" data-image="{image_url}">
             <img src="{image_url}" class="tool-image" alt="{item['name']}">
             <div class="tool-name">{item['name']}</div>
             <div class="tool-desc">{item['description']}</div>
             <div class="tool-price">{item['price']} руб/сутки</div>
             <div class="tool-quantity">Осталось: <span style="color:{status_color};">{quantity}</span> шт.</div>
             <div style="font-size:0.8rem; color:{status_color};">{status_text}</div>
-
-            <!-- Всплывающие элементы (скрыты по умолчанию) -->
-            <img src="{image_url}" class="hover-zoom" alt="Увеличенное фото {item['name']}">
-            <div class="hover-overlay"></div>
         </div>
         """
-    html += '</div>'
 
-    # Вставляем HTML
-    st.markdown(html, unsafe_allow_html=True)
+    # Общий HTML с встроенными стилями и скриптом
+    html = f"""
+    <style>
+        .catalog-grid {{
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            padding: 10px;
+        }}
+        .tool-card {{
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: all 0.2s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: visible;
+            z-index: 1;
+        }}
+        .tool-card:hover {{
+            transform: translateY(-5px);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            border-color: #4CAF50;
+            z-index: 2;
+        }}
+        .tool-card .tool-image {{
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 6px;
+            display: block;
+            margin-bottom: 8px;
+        }}
+        .tool-card .tool-name {{
+            font-weight: bold;
+            font-size: 1.2rem;
+            margin-top: 5px;
+        }}
+        .tool-card .tool-desc {{
+            color: #555;
+            font-size: 0.9rem;
+        }}
+        .tool-card .tool-price {{
+            color: #2E7D32;
+            font-weight: bold;
+            margin-top: 5px;
+        }}
+        .tool-card .tool-quantity {{
+            font-size: 0.8rem;
+            color: #888;
+        }}
+        /* Оверлей и увеличенное фото (общие для всех) */
+        #hover-overlay {{
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            z-index: 9998;
+            display: none;
+            pointer-events: none;
+        }}
+        #hover-zoom-image {{
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.8);
+            z-index: 9999;
+            max-width: 70vw;
+            max-height: 70vh;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            border: 4px solid white;
+            background: white;
+            padding: 5px;
+            display: none;
+            transition: transform 0.25s ease, opacity 0.25s ease;
+            opacity: 0;
+            pointer-events: none;
+        }}
+        #hover-overlay.active {{
+            display: block;
+        }}
+        #hover-zoom-image.active {{
+            display: block;
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }}
+    </style>
+
+    <div class="catalog-grid">
+        {cards_html}
+    </div>
+
+    <!-- Оверлей и увеличенное фото -->
+    <div id="hover-overlay"></div>
+    <img id="hover-zoom-image" src="" alt="Увеличенное фото">
+
+    <script>
+        const cards = document.querySelectorAll('.tool-card');
+        const overlay = document.getElementById('hover-overlay');
+        const zoomImg = document.getElementById('hover-zoom-image');
+
+        cards.forEach(card => {{
+            card.addEventListener('mouseenter', function(e) {{
+                const imgSrc = this.dataset.image;
+                zoomImg.src = imgSrc;
+                overlay.classList.add('active');
+                zoomImg.classList.add('active');
+            }});
+            card.addEventListener('mouseleave', function(e) {{
+                overlay.classList.remove('active');
+                zoomImg.classList.remove('active');
+                // Сброс масштаба для следующей анимации
+                zoomImg.style.transform = 'translate(-50%, -50%) scale(0.8)';
+            }});
+        }});
+    </script>
+    """
+
+    # Рассчитываем высоту компонента (примерно)
+    item_count = len(catalog)
+    rows = (item_count + 2) // 3  # округление вверх
+    height = rows * 280 + 50  # примерная высота под карточки
+
+    # Вставляем HTML-компонент
+    st.components.v1.html(html, height=height, scrolling=True)
 
 # -------------------------------------------------------------------
-# 6. ФОРМА ЗАКАЗА
+# 5. ФОРМА ЗАКАЗА
 # -------------------------------------------------------------------
 
 def order_form(catalog):
@@ -345,7 +360,7 @@ def order_form(catalog):
                     st.info("Данные заказа: " + json.dumps(order_data, ensure_ascii=False, indent=2))
 
 # -------------------------------------------------------------------
-# 7. ОСНОВНОЙ ИНТЕРФЕЙС
+# 6. ОСНОВНОЙ ИНТЕРФЕЙС
 # -------------------------------------------------------------------
 
 def main():
@@ -355,8 +370,6 @@ def main():
         layout="wide",
         initial_sidebar_state="collapsed"
     )
-    # Подключаем CSS
-    inject_hover_zoom_css()
 
     st.title("🔨 Прокат строительного инструмента")
     st.markdown("**Арендуйте качественный инструмент по выгодным ценам!**")

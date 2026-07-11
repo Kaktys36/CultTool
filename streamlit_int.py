@@ -19,7 +19,7 @@ try:
     USE_REAL_SERVICES = True
 except (KeyError, FileNotFoundError, AttributeError):
     USE_REAL_SERVICES = False
-    st.warning("⚠️ Секреты не найдены. Работаем в демонстрационном режиме (без Google Sheets и Telegram).")
+    st.warning("⚠️ Секреты не найдены. Работаем в демонстрационном режиме.")
 
 # -------------------------------------------------------------------
 # 2. ФУНКЦИИ РАБОТЫ С GOOGLE SHEETS
@@ -141,12 +141,13 @@ def send_telegram_notification(order_data):
         return False
 
 # -------------------------------------------------------------------
-# 4. CSS ДЛЯ УВЕЛИЧЕНИЯ ИЗОБРАЖЕНИЙ ПРИ НАВЕДЕНИИ
+# 4. CSS ДЛЯ ВСПЛЫВАЮЩЕГО ФОТО (ПОЯВЛЯЕТСЯ ПРИ НАВЕДЕНИИ)
 # -------------------------------------------------------------------
 
-def inject_enhanced_css():
+def inject_hover_zoom_css():
     st.markdown("""
     <style>
+    /* Карточка инструмента */
     .tool-card {
         border: 1px solid #ddd;
         border-radius: 8px;
@@ -156,7 +157,8 @@ def inject_enhanced_css():
         transition: 0.2s;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         position: relative;
-        overflow: hidden;
+        cursor: pointer;
+        overflow: visible;
     }
     .tool-card:hover {
         transform: translateY(-5px);
@@ -164,15 +166,55 @@ def inject_enhanced_css():
         border-color: #4CAF50;
     }
     .tool-card .tool-image {
-        transition: 0.3s;
         width: 100%;
         height: 150px;
         object-fit: cover;
         border-radius: 6px;
+        transition: 0.3s;
+        display: block;
     }
-    .tool-card:hover .tool-image {
-        transform: scale(1.05);
+    /* Увеличенное фото (всплывающее) - по умолчанию скрыто */
+    .tool-card .hover-zoom {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0.8);
+        z-index: 9999;
+        max-width: 70vw;
+        max-height: 70vh;
+        border-radius: 12px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.25s ease-in-out;
+        border: 4px solid white;
+        background: white;
+        padding: 5px;
     }
+    /* Тёмный фон (оверлей) */
+    .tool-card .hover-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.6);
+        z-index: 9998;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.25s ease-in-out;
+    }
+    /* При наведении на карточку показываем увеличенное фото и оверлей */
+    .tool-card:hover .hover-zoom {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+        pointer-events: auto;
+    }
+    .tool-card:hover .hover-overlay {
+        opacity: 1;
+        pointer-events: auto;
+    }
+    /* Стили для текста внутри карточки */
     .tool-card .tool-name {
         font-weight: bold;
         font-size: 1.2rem;
@@ -191,31 +233,27 @@ def inject_enhanced_css():
         font-size: 0.8rem;
         color: #888;
     }
-    .order-form {
-        background: #f9f9f9;
-        padding: 20px;
-        border-radius: 10px;
-        margin-top: 30px;
-        border: 1px solid #e0e0e0;
-    }
     </style>
     """, unsafe_allow_html=True)
 
 # -------------------------------------------------------------------
-# 5. ОТОБРАЖЕНИЕ КАТАЛОГА
+# 5. ОТОБРАЖЕНИЕ КАТАЛОГА С ВСПЛЫВАЮЩИМИ ФОТО
 # -------------------------------------------------------------------
 
 def display_catalog(catalog):
     st.header("📦 Наш каталог")
-    st.markdown("Наведите на карточку, чтобы увидеть фото крупнее (эффект увеличения).")
+    st.markdown("**Наведите на карточку, чтобы увидеть увеличенное фото инструмента.**")
+
     cols = st.columns(3)
     for idx, item in enumerate(catalog):
         col = cols[idx % 3]
         with col:
-            image_url = item.get("image", "https://vikiperm.com/frontend/web/uploads/2019/mart_2021/rjn.png")
+            image_url = item.get("image", "https://via.placeholder.com/150?text=Инструмент")
             quantity = item.get("quantity", 0)
             status_color = "green" if quantity > 0 else "red"
             status_text = "В наличии" if quantity > 0 else "Нет в наличии"
+
+            # Формируем HTML-карточку с двумя скрытыми элементами для всплывающего фото
             card_html = f"""
             <div class="tool-card">
                 <img src="{image_url}" class="tool-image" alt="{item['name']}">
@@ -224,6 +262,11 @@ def display_catalog(catalog):
                 <div class="tool-price">{item['price']} руб/сутки</div>
                 <div class="tool-quantity">Осталось: <span style="color:{status_color};">{quantity}</span> шт.</div>
                 <div style="font-size:0.8rem; margin-top:4px; color:{status_color};">{status_text}</div>
+                
+                <!-- Всплывающее увеличенное фото -->
+                <img src="{image_url}" class="hover-zoom" alt="Увеличенное фото {item['name']}">
+                <!-- Тёмный фон за ним -->
+                <div class="hover-overlay"></div>
             </div>
             """
             st.markdown(card_html, unsafe_allow_html=True)
@@ -300,14 +343,19 @@ def main():
         layout="wide",
         initial_sidebar_state="collapsed"
     )
-    inject_enhanced_css()
+    # Подключаем CSS с эффектом всплывающего фото
+    inject_hover_zoom_css()
+
     st.title("🔨 Прокат строительного инструмента")
     st.markdown("**Арендуйте качественный инструмент по выгодным ценам!**")
     st.markdown("---")
+
     catalog = load_catalog_from_sheets()
     display_catalog(catalog)
+
     st.markdown("---")
     order_form(catalog)
+
     st.markdown("---")
     st.markdown(
         """

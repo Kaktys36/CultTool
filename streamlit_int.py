@@ -244,32 +244,72 @@ def display_catalog(catalog):
     st.header("📦 Наш каталог")
     st.markdown("**Наведите на карточку, чтобы увидеть увеличенное фото инструмента.**")
 
-    cols = st.columns(3)
+    # Строим HTML-контейнер со всеми карточками и единой JS-логикой
+    html = """
+    <div id="catalog-container" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+    """
     for idx, item in enumerate(catalog):
-        col = cols[idx % 3]
-        with col:
-            image_url = item.get("image", "https://via.placeholder.com/150?text=Инструмент")
-            quantity = item.get("quantity", 0)
-            status_color = "green" if quantity > 0 else "red"
-            status_text = "В наличии" if quantity > 0 else "Нет в наличии"
+        image_url = item.get("image", "https://via.placeholder.com/150?text=Инструмент")
+        quantity = item.get("quantity", 0)
+        status_color = "green" if quantity > 0 else "red"
+        status_text = "В наличии" if quantity > 0 else "Нет в наличии"
 
-            # Формируем HTML-карточку с двумя скрытыми элементами для всплывающего фото
-            card_html = f"""
-            <div class="tool-card">
-                <img src="{image_url}" class="tool-image" alt="{item['name']}">
-                <div class="tool-name">{item['name']}</div>
-                <div class="tool-desc">{item['description']}</div>
-                <div class="tool-price">{item['price']} руб/сутки</div>
-                <div class="tool-quantity">Осталось: <span style="color:{status_color};">{quantity}</span> шт.</div>
-                <div style="font-size:0.8rem; margin-top:4px; color:{status_color};">{status_text}</div>
-                
-                <!-- Всплывающее увеличенное фото -->
-                <img src="{image_url}" class="hover-zoom" alt="Увеличенное фото {item['name']}">
-                <!-- Тёмный фон за ним -->
-                <div class="hover-overlay"></div>
-            </div>
-            """
-            st.markdown(card_html, unsafe_allow_html=True)
+        # Каждая карточка с уникальным ID и атрибутом data-image для JS
+        html += f"""
+        <div class="tool-card" data-image="{image_url}" style="border:1px solid #ddd; border-radius:8px; padding:15px; background:white; box-shadow:0 2px 4px rgba(0,0,0,0.05); transition:0.2s; cursor:pointer; position:relative;">
+            <img src="{image_url}" style="width:100%; height:150px; object-fit:cover; border-radius:6px; display:block; margin-bottom:8px;">
+            <div style="font-weight:bold; font-size:1.2rem;">{item['name']}</div>
+            <div style="color:#555; font-size:0.9rem;">{item['description']}</div>
+            <div style="color:#2E7D32; font-weight:bold; margin-top:5px;">{item['price']} руб/сутки</div>
+            <div style="font-size:0.8rem; color:#888;">Осталось: <span style="color:{status_color};">{quantity}</span> шт.</div>
+            <div style="font-size:0.8rem; color:{status_color};">{status_text}</div>
+        </div>
+        """
+    html += """
+    </div>
+
+    <!-- Единый оверлей и увеличенное изображение (показывается через JS) -->
+    <div id="hover-overlay" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:9998; display:none; pointer-events:none;"></div>
+    <img id="hover-zoom-image" src="" alt="Увеличенное фото" style="position:fixed; top:50%; left:50%; transform:translate(-50%, -50%) scale(0.8); z-index:9999; max-width:70vw; max-height:70vh; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,0.5); border:4px solid white; background:white; padding:5px; display:none; transition: all 0.25s ease-in-out;">
+
+    <script>
+        const cards = document.querySelectorAll('.tool-card');
+        const overlay = document.getElementById('hover-overlay');
+        const zoomImg = document.getElementById('hover-zoom-image');
+
+        cards.forEach(card => {
+            card.addEventListener('mouseenter', function(e) {
+                const imgSrc = this.dataset.image;
+                zoomImg.src = imgSrc;
+                overlay.style.display = 'block';
+                zoomImg.style.display = 'block';
+                // Небольшая задержка, чтобы сработала анимация (scale от 0.8 к 1)
+                setTimeout(() => {
+                    zoomImg.style.transform = 'translate(-50%, -50%) scale(1)';
+                }, 10);
+            });
+            card.addEventListener('mouseleave', function(e) {
+                overlay.style.display = 'none';
+                zoomImg.style.display = 'none';
+                zoomImg.style.transform = 'translate(-50%, -50%) scale(0.8)';
+            });
+        });
+    </script>
+    """
+
+    # Вставляем HTML-компонент с высотой в 1px (чтобы не занимал лишнее место)
+    # Но нам нужно, чтобы он был вставлен в поток, поэтому используем обычный st.markdown с unsafe_allow_html=True
+    # Однако для надёжности используем st.components.v1.html с фиксированной высотой.
+    # Так как содержимое динамическое, используем высоту, адаптивную под количество карточек.
+    # Рассчитаем приблизительную высоту: 3 колонки, каждая карточка ~ 350px, плюс отступы.
+    # Но мы можем задать "auto" через JS? Лучше просто использовать st.markdown, но там не работает JS.
+    # Используем st.components.v1.html с высотой, чтобы JS точно выполнялся.
+    # Чтобы не гадать с высотой, добавим контейнер с классом и используем JS для определения высоты.
+
+    # Проще: используем st.markdown с html, но тогда JS может не сработать из-за ограничений.
+    # В Streamlit Cloud рекомендуется использовать st.components.v1.html.
+    # Сделаем так:
+    st.components.v1.html(html, height=400 + len(catalog)*100, scrolling=True)
 
 # -------------------------------------------------------------------
 # 6. ФОРМА ЗАКАЗА

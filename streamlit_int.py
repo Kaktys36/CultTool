@@ -212,7 +212,7 @@ def display_catalog(catalog):
     for idx, item in enumerate(catalog):
         col = cols[idx % 3]
         with col:
-            image_url = item.get("image", "https://via.placeholder.com/150?text=Инструмент")
+            image_url = item.get("image", "https://vikiperm.com/frontend/web/uploads/2019/mart_2021/rjn.png")
             quantity = item.get("quantity", 0)
             status_color = "green" if quantity > 0 else "red"
             status_text = "В наличии" if quantity > 0 else "Нет в наличии"
